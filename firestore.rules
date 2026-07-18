@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The browser uses the authenticated REST API. Firebase Admin bypasses
+    // these rules, so direct client access remains closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
