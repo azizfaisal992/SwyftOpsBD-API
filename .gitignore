@@ -17,6 +17,9 @@ dist-ssr
 *service-account*.json
 firebase-adminsdk-*.json
 
+# Runtime uploaded files
+uploads/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
