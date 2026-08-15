@@ -2,6 +2,7 @@ import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { readFileSync } from "node:fs";
 
 const parseServiceAccount = () => {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
@@ -9,6 +10,11 @@ const parseServiceAccount = () => {
   }
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  }
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_FILE) {
+    return JSON.parse(
+      readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_FILE, "utf8"),
+    );
   }
   return null;
 };
@@ -25,4 +31,9 @@ const app = getApps()[0] || initializeApp({
 
 export const adminAuth = getAuth(app);
 export const db = getFirestore(app);
+db.settings({
+  // REST avoids indefinite gRPC connection hangs on restricted Windows,
+  // campus and hosted networks while preserving Firestore semantics.
+  preferRest: true,
+});
 export const bucket = getStorage(app).bucket(storageBucket);
