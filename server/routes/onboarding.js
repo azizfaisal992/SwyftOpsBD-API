@@ -1,7 +1,13 @@
 import { Router } from "express";
 import multer from "multer";
-import { bucket, db } from "../firebaseAdmin.js";
-import { authenticate } from "../middleware/authenticate.js";
+import { db } from "../firebaseAdmin.js";
+import {
+  ApiError,
+  badRequest,
+  notFound,
+  validationError,
+} from "../errors/ApiError.js";
+import { authenticate, requireRole } from "../middleware/authenticate.js";
 import {
   assertEditable,
   deriveOnboarding,
@@ -9,6 +15,10 @@ import {
   sanitizeAssessment,
   sanitizeProfile,
 } from "../onboardingModel.js";
+import {
+  deletePrivateFile,
+  savePrivateFile,
+} from "../services/fileStorage.js";
 
 const router = Router();
 const upload = multer({
@@ -38,7 +48,7 @@ const setNestedValue = (record, path, value) => {
   return nextRecord;
 };
 
-router.use(authenticate);
+router.use(authenticate, requireRole("caregiver"));
 
 router.get("/me", async (request, response, next) => {
   try {
@@ -81,10 +91,14 @@ router.put("/assessment", async (request, response, next) => {
 router.post("/files/:kind", upload.single("file"), async (request, response, next) => {
   try {
     const configuration = uploadKinds[request.params.kind];
-    if (!configuration) return response.status(404).json({ error: "Unknown onboarding file type." });
-    if (!request.file) return response.status(400).json({ error: "Select a file to upload." });
+    if (!configuration) return next(notFound("Unknown onboarding file type."));
+    if (!request.file) return next(badRequest("Select a file to upload."));
     if (!configuration.types.includes(request.file.mimetype)) {
-      return response.status(415).json({ error: "This file format is not supported." });
+      return next(new ApiError(
+        415,
+        "UNSUPPORTED_MEDIA_TYPE",
+        "This file format is not supported.",
+      ));
     }
 
     const current = await getOnboardingRecord(db, request.user);
@@ -92,11 +106,13 @@ router.post("/files/:kind", upload.single("file"), async (request, response, nex
     let previousFile = current;
     for (const key of configuration.target) previousFile = previousFile?.[key];
     const storagePath = `caregiver-onboarding/${request.user.uid}/${request.params.kind}/${Date.now()}-${safeFileName(request.file.originalname)}`;
-    await bucket.file(storagePath).save(request.file.buffer, {
-      resumable: false,
+    const storedFile = await savePrivateFile({
+      storagePath,
+      buffer: request.file.buffer,
+      contentType: request.file.mimetype,
       metadata: {
-        contentType: request.file.mimetype,
-        metadata: { ownerUid: request.user.uid, onboardingKind: request.params.kind },
+        ownerUid: request.user.uid,
+        onboardingKind: request.params.kind,
       },
     });
 
@@ -105,12 +121,16 @@ router.post("/files/:kind", upload.single("file"), async (request, response, nex
       size: request.file.size,
       type: request.file.mimetype,
       storagePath,
+      storageProvider: storedFile.provider,
       uploadedAt: new Date().toISOString(),
     };
     const record = deriveOnboarding(setNestedValue(current, configuration.target, metadata));
     await db.collection("caregiverOnboarding").doc(request.user.uid).set(record);
     if (previousFile?.storagePath && previousFile.storagePath !== storagePath) {
-      await bucket.file(previousFile.storagePath).delete({ ignoreNotFound: true });
+      await deletePrivateFile(
+        previousFile.storagePath,
+        previousFile.storageProvider,
+      );
     }
     return response.status(201).json({ data: record, file: metadata });
   } catch (error) {
@@ -121,13 +141,15 @@ router.post("/files/:kind", upload.single("file"), async (request, response, nex
 router.delete("/files/:kind", async (request, response, next) => {
   try {
     const configuration = uploadKinds[request.params.kind];
-    if (!configuration) return response.status(404).json({ error: "Unknown onboarding file type." });
+    if (!configuration) return next(notFound("Unknown onboarding file type."));
 
     const current = await getOnboardingRecord(db, request.user);
     assertEditable(current);
     let existing = current;
     for (const key of configuration.target) existing = existing?.[key];
-    if (existing?.storagePath) await bucket.file(existing.storagePath).delete({ ignoreNotFound: true });
+    if (existing?.storagePath) {
+      await deletePrivateFile(existing.storagePath, existing.storageProvider);
+    }
 
     const record = deriveOnboarding(setNestedValue(current, configuration.target, null));
     await db.collection("caregiverOnboarding").doc(request.user.uid).set(record);
@@ -144,10 +166,14 @@ router.post("/submit", async (request, response, next) => {
     const ethicsWordCount = current.assessment.ethics.split(/\s+/).filter(Boolean).length;
 
     if (!current.profileCompleted || !current.credentialsCompleted) {
-      return response.status(422).json({ error: "Complete the profile and required credentials before submitting." });
+      return next(validationError(
+        "Complete the profile and required credentials before submitting.",
+      ));
     }
     if (!current.assessment.emergency || ethicsWordCount < 50 || current.assessment.hygiene.length < 4) {
-      return response.status(422).json({ error: "Complete every required assessment question before submitting." });
+      return next(validationError(
+        "Complete every required assessment question before submitting.",
+      ));
     }
 
     const record = deriveOnboarding({

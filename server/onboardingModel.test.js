@@ -21,6 +21,8 @@ const completeRecord = () => {
     city: "Dhaka",
     state: "Dhaka",
     zipCode: "1212",
+    services: ["Senior Care"],
+    hourlyRate: "850",
   };
   record.credentials = {
     ...record.credentials,
@@ -50,6 +52,7 @@ test("adds the final ten percent only after approval", () => {
 
 test("locks an onboarding record during review", () => {
   assert.throws(() => assertEditable({ verificationStatus: "under_review" }), /locked/);
+  assert.throws(() => assertEditable({ verificationStatus: "rejected" }), /locked/);
   assert.doesNotThrow(() => assertEditable({ verificationStatus: "changes_required" }));
 });
 

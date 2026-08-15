@@ -9,6 +9,8 @@ const profileFields = [
   "city",
   "state",
   "zipCode",
+  "services",
+  "hourlyRate",
 ];
 
 export const emptyOnboarding = (user) => ({
@@ -26,6 +28,8 @@ export const emptyOnboarding = (user) => ({
     state: "",
     zipCode: "",
     serviceRadius: "25",
+    services: [],
+    hourlyRate: "",
   },
   credentials: {
     resume: null,
@@ -50,6 +54,7 @@ export const emptyOnboarding = (user) => ({
   reviewFeedback: "",
   submittedAt: null,
   reviewedAt: null,
+  reviewedBy: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   progress: 0,
@@ -101,7 +106,7 @@ export const getOnboardingRecord = async (db, user) => {
 };
 
 export const assertEditable = (record) => {
-  if (["under_review", "approved"].includes(record.verificationStatus)) {
+  if (["under_review", "approved", "rejected"].includes(record.verificationStatus)) {
     const error = new Error("This onboarding submission is locked while it is under review.");
     error.status = 409;
     throw error;
@@ -110,7 +115,26 @@ export const assertEditable = (record) => {
 
 export const sanitizeProfile = (body = {}) => {
   const allowed = ["fullName", "dateOfBirth", "gender", "phone", "email", "address", "city", "state", "zipCode", "serviceRadius"];
-  return Object.fromEntries(allowed.map((field) => [field, String(body[field] ?? "").trim()]));
+  const profile = Object.fromEntries(allowed.map((field) => [field, String(body[field] ?? "").trim()]));
+  const supportedServices = new Set([
+    "Senior Care",
+    "Child Care",
+    "Home Nursing",
+    "Companion Care",
+    "Physiotherapy",
+    "Dementia Care",
+  ]);
+  profile.services = Array.isArray(body.services)
+    ? [...new Set(body.services.map(String))].filter((item) =>
+        supportedServices.has(item),
+      )
+    : [];
+  const hourlyRate = Number(body.hourlyRate);
+  profile.hourlyRate =
+    Number.isFinite(hourlyRate) && hourlyRate > 0
+      ? String(Math.round(hourlyRate))
+      : "";
+  return profile;
 };
 
 export const sanitizeAssessment = (body = {}) => ({
