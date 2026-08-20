@@ -16,26 +16,32 @@ import { queueCaregiverAcceptanceAdvance } from "../services/caregiverAdvanceSer
 const router = Router();
 router.use(authenticate, requireAdmin);
 
+const validDocumentId = (value) =>
+  typeof value === "string" && value.trim() ? value.trim() : null;
+
 const requestWithAdminDetails = async (document) => {
   const request = document.data();
+  const clientId = validDocumentId(request.clientId);
+  const billingAgreementId = validDocumentId(request.billingAgreementId);
+  const carePlanId = validDocumentId(request.carePlanId);
   const [responses, userSnapshot] = await Promise.all([
     document.ref.collection("responses").limit(100).get(),
-    request.clientId
-      ? db.collection("users").doc(request.clientId).get()
+    clientId
+      ? db.collection("users").doc(clientId).get()
       : Promise.resolve(null),
   ]);
   let agreement = null;
-  if (request.billingAgreementId) {
+  if (billingAgreementId) {
     const billingDocument = await db
       .collection("billingAgreements")
-      .doc(request.billingAgreementId)
+      .doc(billingAgreementId)
       .get();
     agreement = billingDocument.exists ? billingDocument.data() : null;
   }
-  if (!agreement && request.carePlanId) {
+  if (!agreement && carePlanId) {
     const billingSnapshot = await db
       .collection("billingAgreements")
-      .where("carePlanId", "==", request.carePlanId)
+      .where("carePlanId", "==", carePlanId)
       .limit(1)
       .get();
     agreement = billingSnapshot.docs[0]?.data() || null;
