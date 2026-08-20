@@ -100,7 +100,12 @@ export const autocompletePlaces = async (query, fetcher) => {
     },
     fetcher,
   );
-  return (payload.places || [])
+  const places = Array.isArray(payload.places)
+    ? payload.places
+    : Array.isArray(payload.data?.places)
+      ? payload.data.places
+      : [];
+  return places
     .map((place) => ({
       id: String(place.id || place.uCode || place.address || ""),
       address: place.address || place.Address || "",
@@ -134,7 +139,7 @@ export const reverseGeocode = async (latitude, longitude, fetcher) => {
     },
     fetcher,
   );
-  const place = payload.place || {};
+  const place = payload.place || payload.data?.place || payload.data || {};
   return {
     address: place.address || "",
     addressBangla: place.address_bn || "",
