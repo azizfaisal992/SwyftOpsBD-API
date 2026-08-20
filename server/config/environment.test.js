@@ -29,6 +29,11 @@ test("rejects invalid ports and origins", () => {
   );
 });
 
+test("prefers the hosting platform PORT over the local API_PORT", () => {
+  const environment = loadEnvironment({ PORT: "10000", API_PORT: "4000" });
+  assert.equal(environment.port, 10000);
+});
+
 test("requires explicit production project and origin", () => {
   assert.throws(
     () => loadEnvironment({ NODE_ENV: "production" }),

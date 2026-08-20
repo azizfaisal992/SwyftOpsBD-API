@@ -78,7 +78,9 @@ export const loadEnvironment = (source = process.env) => {
 
   return Object.freeze({
     nodeEnv,
-    port: parsePort(source.API_PORT),
+    // Render and most managed hosts inject PORT. API_PORT remains the local
+    // development override for backward compatibility.
+    port: parsePort(source.PORT || source.API_PORT),
     allowedOrigins: Object.freeze(parseOrigins(source.CLIENT_ORIGIN)),
     firebaseProjectId: source.FIREBASE_PROJECT_ID || "swiftopsbd",
     fileStorageProvider,
