@@ -7,15 +7,20 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "lint": "eslint .",
-    "test": "node --test server/onboardingModel.test.js",
-    "admin:set": "node server/scripts/setAdmin.js"
+    "test": "node --test server/onboardingModel.test.js server/clientOnboardingModel.test.js server/careRequestModel.test.js server/assignmentModel.test.js server/visitExecutionModel.test.js server/paymentModel.test.js server/communicationModel.test.js server/incidentModel.test.js server/adminReportModel.test.js server/app.test.js server/config/environment.test.js server/validation/index.test.js server/repositories/firestoreRepository.test.js server/services/identityService.test.js server/services/barikoiService.test.js server/services/sslCommerzService.test.js server/services/payslipService.test.js server/services/supabaseStorageService.test.js",
+    "admin:set": "node server/scripts/setAdmin.js",
+    "storage:migrate": "node server/scripts/migrateLocalFilesToSupabase.js",
+    "docs:swagger-guide": "node server/scripts/generateSwaggerGuide.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.111.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase-admin": "^14.2.0",
-    "multer": "^2.2.0"
+    "multer": "^2.2.0",
+    "stripe": "^22.4.0",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
