@@ -17,10 +17,6 @@ import {
   settleTestPayment,
 } from "../paymentModel.js";
 import { buildCareRequest } from "../careRequestModel.js";
-import {
-  createSslCommerzSession,
-  validateSslCommerzPayment,
-} from "../services/sslCommerzService.js";
 import { createPayslipPdf } from "../services/payslipService.js";
 import {
   assertStripeCheckoutMatches,
@@ -36,12 +32,6 @@ const clientOrigin = () =>
   String(process.env.CLIENT_ORIGIN || "http://localhost:5173")
     .split(",")[0]
     .trim();
-
-const publicApiUrl = () =>
-  String(
-    process.env.API_PUBLIC_URL ||
-    `http://localhost:${process.env.API_PORT || 4000}`,
-  ).replace(/\/$/, "");
 
 const finalizePaymentSession = async ({
   sessionId,
@@ -273,60 +263,6 @@ const reconcileStripePaymentSession = async (session) => {
   });
   return finalized.session;
 };
-
-const redirectToPaymentResult = (response, result, invoice = null) => {
-  const destination =
-    invoice?.stage === "deposit" && invoice?.carePlanId
-      ? `/care-checkout?plan=${encodeURIComponent(invoice.carePlanId)}&payment=${encodeURIComponent(result)}`
-      : `/client/payments?payment=${encodeURIComponent(result)}`;
-  return response.redirect(303, `${clientOrigin()}${destination}`);
-};
-
-router.post("/sslcommerz/success", async (request, response) => {
-  try {
-    const { session, invoice } = await loadGatewaySession(request.body.tran_id);
-    const gatewayDetails = await validateSslCommerzPayment({
-      validationId: request.body.val_id,
-      expectedSessionId: session.sessionId,
-      expectedInvoiceId: invoice.invoiceId,
-      expectedAmount: invoice.total,
-    });
-    await finalizePaymentSession({
-      sessionId: session.sessionId,
-      successful: true,
-      gatewayDetails,
-    });
-    return redirectToPaymentResult(response, "success", invoice);
-  } catch (error) {
-    console.error("SSLCommerz success callback failed.", error);
-    return redirectToPaymentResult(response, "failed");
-  }
-});
-
-router.post("/sslcommerz/ipn", async (request, response, next) => {
-  try {
-    const { session, invoice } = await loadGatewaySession(request.body.tran_id);
-    const gatewayDetails = await validateSslCommerzPayment({
-      validationId: request.body.val_id,
-      expectedSessionId: session.sessionId,
-      expectedInvoiceId: invoice.invoiceId,
-      expectedAmount: invoice.total,
-    });
-    await finalizePaymentSession({
-      sessionId: session.sessionId,
-      successful: true,
-      gatewayDetails,
-    });
-    return response.status(200).send("Payment validated.");
-  } catch (error) {
-    return next(error);
-  }
-});
-
-for (const result of ["fail", "cancel"]) {
-  router.post(`/sslcommerz/${result}`, (request, response) =>
-    redirectToPaymentResult(response, result));
-}
 
 router.post("/stripe/webhook", async (request, response, next) => {
   try {
@@ -873,39 +809,7 @@ router.post("/invoices/:invoiceId/checkout", async (request, response, next) => 
         },
       });
     }
-    const clientSnapshot = await db.collection("clientOnboarding")
-      .doc(request.user.uid)
-      .get();
-    const client = clientSnapshot.data() || {};
-    const gateway = await createSslCommerzSession({
-      session,
-      invoice,
-      customer: {
-        name: client.profile?.fullName || request.user.name,
-        email: client.contact?.email || request.user.email,
-        phone: client.contact?.phone,
-        address: [
-          client.contact?.house,
-          client.contact?.road,
-          client.contact?.area,
-        ].filter(Boolean).join(", "),
-        city: "Dhaka",
-      },
-      apiBaseUrl: publicApiUrl(),
-      clientOrigin: clientOrigin(),
-    });
-    const hostedSession = {
-      ...session,
-      ...gateway,
-      nextAction: "redirect",
-    };
-    await sessionReference.set(hostedSession);
-    return response.status(201).json({
-      data: {
-        ...hostedSession,
-        message: "Continue on the secure SSLCommerz hosted checkout.",
-      },
-    });
+    return next(validationError("Unsupported payment provider."));
   } catch (error) {
     return next(error);
   }
